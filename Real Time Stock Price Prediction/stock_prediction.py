@@ -1,43 +1,35 @@
-import tkinter as tk
-from tkinter import ttk
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-from forex_python.converter import CurrencyRates
-from datetime import datetime
-import logging
-import os
-import matplotlib.pyplot as plt
-from tkinter import ttk
-import yfinance as yf
-import pandas as pd
+import tkinter as tk  
+import pandas as pd  
+from tkinter import ttk, messagebox 
+from matplotlib.figure import Figure  
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  
+from statsmodels.tsa.statespace.sarimax import SARIMAX  # Importing SARIMAX model from statsmodels
+from forex_python.converter import CurrencyRates  
+from datetime import datetime  
+import logging  
+import os  
+import matplotlib.pyplot as plt 
+import yfinance as yf 
 
 # Set up logging
-log_folder = "logs"
-os.makedirs(log_folder, exist_ok=True)
-log_file = os.path.join(log_folder, "stock_prediction.log")
-
 logging.basicConfig(
-    filename=log_file,
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    level=logging.DEBUG,  # Setting logging level to DEBUG
+    format="%(asctime)s - %(levelname)s: %(message)s",  # Setting format for log messages
+    datefmt="%Y-%m-%d %H:%M:%S"  # Setting date format
 )
 
-def get_stock_data(symbol):
+def get_current_stock_price(symbol): 
+    """Fetches the current stock price for the given symbol."""
     try:
         stock = yf.Ticker(symbol)
-        data = stock.history(period="1y")
-        return data['Close']
+        data = stock.history(period="1d")  # Fetch only today's data
+        current_price = data['Close'].iloc[-1]  # Get the most recent closing price
+        return current_price
     except Exception as e:
-        raise ValueError(f"Error fetching data for {symbol}: {str(e)}")
+        raise ValueError(f"Error fetching current price for {symbol}: {str(e)}")
 
-def get_exchange_rate():
-    c = CurrencyRates()
-    exchange_rate = c.get_rate('USD', 'INR')
-    return exchange_rate
-
-def train_model(symbol):
+def train_model(symbol): # Training the model
+    """Trains a SARIMAX model using historical stock data for the given symbol."""
     try:
         stock = yf.Ticker(symbol)
         data = stock.history(period="1y")
@@ -48,12 +40,14 @@ def train_model(symbol):
     except Exception as e:
         raise ValueError(f"Error training model for {symbol}: {str(e)}")
 
-def predict_price(model, days=1):
+def predict_price(model, days=7): # Default prediction for 7 days 
+    """Predicts the stock price for the given number of days using the trained model."""
     forecast = model.get_forecast(steps=days)
     predicted_price = forecast.predicted_mean.iloc[-1]
     return predicted_price
 
 def plot_stock_data(stock_data, symbol, predicted_price_inr):
+    """Plots the historical stock data along with the predicted price."""
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(stock_data, label=f'{symbol} Stock Price')
     ax.axhline(y=predicted_price_inr, color='r', linestyle='--', label='Predicted Price')
@@ -66,9 +60,11 @@ def plot_stock_data(stock_data, symbol, predicted_price_inr):
 
 class StockPredictionApp:
     def __init__(self, root):
+        """Initializes the GUI application."""
         self.root = root
-        self.root.title("Stock Price Prediction")
+        self.root.title("Stock Price Prediction")  # Setting title for the window
 
+        # Creating GUI components
         self.symbol_label = ttk.Label(root, text="Enter Stock Symbol:")
         self.symbol_entry = ttk.Entry(root)
         self.predict_button = ttk.Button(root, text="Predict & Plot", command=self.show_plot)
@@ -77,6 +73,7 @@ class StockPredictionApp:
         self.predicted_price_label = ttk.Label(root, text="Predicted Price:")
         self.suggestion_label = ttk.Label(root, text="Suggestion: ")
 
+        # Packing GUI components
         self.symbol_label.pack(pady=10)
         self.symbol_entry.pack(pady=10)
         self.predict_button.pack(pady=10)
@@ -84,6 +81,7 @@ class StockPredictionApp:
         self.predicted_price_label.pack(pady=10)
         self.suggestion_label.pack(pady=10)
 
+        # Creating canvas for plotting
         self.canvas_frame = ttk.Frame(root)
         self.canvas_frame.pack(expand=True, fill='both')
 
@@ -96,57 +94,44 @@ class StockPredictionApp:
         self.scrollbar.config(command=self.canvas.yview)
 
     def show_plot(self):
+        """Handles the "Predict & Plot" button click event."""
         symbol = self.symbol_entry.get()
         try:
-            stock_data = get_stock_data(symbol)
+            # Fetching current stock price, training model, and predicting price
+            current_price = get_current_stock_price(symbol)
             model = train_model(symbol)
-            predicted_price_usd = predict_price(model, days=7)
+            predicted_price_inr = predict_price(model, days=7)
 
-            exchange_rate = get_exchange_rate()
-            stock_data_inr = stock_data * exchange_rate
-            predicted_price_inr = predicted_price_usd * exchange_rate
-
-            # Update labels
-            current_price = stock_data_inr.iloc[-1]
+            # Updating labels with current and predicted prices
             self.current_price_label.config(text=f"Current Price: ₹{current_price:.2f}")
             self.predicted_price_label.config(text=f"Predicted Price: ₹{predicted_price_inr:.2f}")
 
-            # Determine the suggestion
+            # Determining suggestion (whether to buy, sell, or hold)
             suggestion = self.get_suggestion(current_price, predicted_price_inr)
             self.suggestion_label.config(text=f"Suggestion: {suggestion}")
 
-            # Log the prediction details
+            # Logging the prediction details
             logging.info(f"Symbol: {symbol}, Current Price: {current_price:.2f}, Predicted Price: {predicted_price_inr:.2f}, Suggestion: {suggestion}")
 
             # Plotting
-            fig, ax = plt.subplots(figsize=(10, 5))
-            ax.plot(stock_data_inr, label=f'{symbol} Stock Price')
-            ax.axhline(y=predicted_price_inr, color='r', linestyle='--', label='Predicted Price')
-
-            # Include date, time, and data in the title
-            now = datetime.now()
-            plot_date = now.strftime("%Y-%m-%d %H:%M:%S")
-            ax.set_title(f'{symbol} Stock Price Over Time\nAs of {plot_date}')
-
-            ax.set_xlabel('Date')
-            ax.set_ylabel('Stock Price (INR)')
-            ax.legend()
-            ax.grid(True)
+            stock_data = yf.Ticker(symbol).history(period="1y")['Close']
+            fig = plot_stock_data(stock_data, symbol, predicted_price_inr)
 
             canvas = FigureCanvasTkAgg(fig, master=self.canvas)
             canvas.draw()
 
             canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
 
-            # Center the plot
+            # Centering the plot
             self.canvas.create_window(self.canvas.winfo_width() / 2, self.canvas.winfo_height() / 2, window=canvas.get_tk_widget(), anchor="center")
 
         except ValueError as ve:
-            tk.messagebox.showerror("Error", str(ve))
-            # Log the error
+            messagebox.showerror("Error", str(ve))
+            # Logging the error
             logging.error(f"Error for symbol {symbol}: {str(ve)}")
 
     def get_suggestion(self, current_price, predicted_price):
+        """Determines the suggestion (whether to buy, sell, or hold)."""
         # Add your suggestion logic here
         if predicted_price > current_price:
             logging.debug("Suggestion: Buy")
@@ -159,6 +144,7 @@ class StockPredictionApp:
             return "Hold"
 
 if __name__ == "__main__":
+    # Creating the tkinter window and initializing the GUI application
     root = tk.Tk()
     app = StockPredictionApp(root)
-    root.mainloop()
+    root.mainloop()  # Starting the GUI event loop
