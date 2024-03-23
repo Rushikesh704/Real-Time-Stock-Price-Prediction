@@ -1,5 +1,3 @@
----
-
 **Repository Name:** Real Time Stock Price Prediction App
 
 **Description:**
@@ -17,7 +15,8 @@
 1. Clone the repository to your local machine.
 2. Install the required dependencies using `pip install -r requirements.txt`.
 3. Run the script (`stock_prediction.py`) and enter the stock symbol when prompted.
-4. Explore the visualized historical and predicted stock prices along with actionable suggestions.
+4. Go to yahoo finance website to get stock symbols and try indian stocks as the default currency is INR.{ex - MRF,TATA} 
+5. Explore the visualized historical and predicted stock prices along with actionable suggestions.
 
 **Dependencies:**
 - `tkinter`
@@ -30,5 +29,3 @@
 **Note:** Ensure you have Python installed on your machine.
 
 Feel free to contribute, open issues, or suggest improvements. Happy predicting!
-
----
